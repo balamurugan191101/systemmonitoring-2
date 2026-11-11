@@ -15,11 +15,16 @@ const { readDrives } = require('./drive-info');
 const { createDatabasePool } = require('./database');
 
 const PORT = Number(process.env.PORT || 3100);
+
 const HOST = process.env.NODE_ENV === 'production'
   ? '0.0.0.0'
   : (process.env.HOST || '127.0.0.1');
+
+const production = process.env.NODE_ENV === 'production';
 const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret || Buffer.byteLength(sessionSecret) < 32) throw new Error('SESSION_SECRET must contain at least 32 bytes');
+if (!sessionSecret || Buffer.byteLength(sessionSecret) < 32) {
+  throw new Error('SESSION_SECRET must contain at least 32 bytes');
+}
 const pool = createDatabasePool();
 const app = express();
 app.disable('x-powered-by');
@@ -39,7 +44,9 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
     },
   },
-  strictTransportSecurity: production ? { maxAge: 31536000 } : false,
+  strictTransportSecurity: production
+    ? { maxAge: 31536000 }
+    : false,
 }));
 app.use(express.json({ limit: '16kb' }));
 app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
