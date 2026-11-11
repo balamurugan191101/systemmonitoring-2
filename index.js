@@ -15,8 +15,9 @@ const { readDrives } = require('./drive-info');
 const { createDatabasePool } = require('./database');
 
 const PORT = Number(process.env.PORT || 3100);
-const HOST = process.env.HOST || '127.0.0.1';
-const production = process.env.NODE_ENV === 'production';
+const HOST = process.env.NODE_ENV === 'production'
+  ? '0.0.0.0'
+  : (process.env.HOST || '127.0.0.1');
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || Buffer.byteLength(sessionSecret) < 32) throw new Error('SESSION_SECRET must contain at least 32 bytes');
 const pool = createDatabasePool();
@@ -185,7 +186,7 @@ app.patch('/api/admin/users/:id', adminLimiter, requireAuth, requireRole('Super 
     await db.query('COMMIT');
     if (role !== undefined || isActive !== undefined) await audit(req, role !== undefined && role !== before.rows[0].role ? 'role_changed' : 'account_status_changed', { targetUserId: id, role: updated.rows[0].role, isActive: updated.rows[0].is_active });
     res.json(updated.rows[0]);
-  } catch (err) { try { await db.query('ROLLBACK'); } catch {} next(err); }
+  } catch (err) { try { await db.query('ROLLBACK'); } catch { } next(err); }
   finally { db.release(); }
 });
 app.get('/api/admin/audit', adminLimiter, requireAuth, requireRole('Super Admin'), async (_req, res, next) => {
@@ -354,9 +355,14 @@ app.use((req, res) => res.status(404).json({ error: 'Not found.' }));
 app.use((err, _req, res, _next) => { console.error('API request failed:', err.message); res.status(500).json({ error: 'Internal server error.' }); });
 
 let server;
-pool.query('SELECT 1').then(() => { server = app.listen(PORT, HOST, () => console.log(`Storage Monitor API listening on ${HOST}:${PORT}`)); })
-  .catch((err) => { console.error('Database connection failed:', err.message); process.exitCode = 1; });
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
-  if (!server) return pool.end().finally(() => process.exit(0));
-  server.close(() => pool.end().finally(() => process.exit(0)));
-});
+
+pool.query('SELECT 1')
+  .then(() => {
+    server = app.listen(PORT, HOST, () =>
+      console.log(`Storage Monitor API listening on ${HOST}:${PORT}`)
+    );
+  })
+  .catch((err) => {
+    console.error('Database connection failed:', err.message);
+    process.exitCode = 1;
+  });
